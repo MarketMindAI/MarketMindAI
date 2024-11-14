@@ -29,3 +29,77 @@ class CommunityAnalyzer:
             'content_quality': self._assess_content_quality(interaction_data),
             'community_retention': self._calculate_retention_rates(interaction_data)
         }
+
+class EnhancedSocialSentimentAnalyzer:
+    def __init__(self, twitter_api_credentials: Dict):
+        self.twitter_analyzer = TwitterAnalyzer(
+            api_key=twitter_api_credentials['api_key'],
+            api_secret=twitter_api_credentials['api_secret'],
+            bearer_token=twitter_api_credentials['bearer_token']
+        )
+        self.sentiment_cache = {}
+        self.engagement_metrics = {}
+
+    async def analyze_comprehensive_sentiment(self, token_symbol: str) -> Dict:
+        """
+        Comprehensive social sentiment analysis including Twitter data
+        """
+        # Get Twitter sentiment
+        twitter_sentiment = await self.twitter_analyzer.analyze_token_sentiment(token_symbol)
+        influencer_impact = self.twitter_analyzer.track_influencer_mentions(token_symbol)
+
+        # Combine with other social metrics
+        sentiment_analysis = {
+            'twitter_metrics': twitter_sentiment,
+            'influencer_analysis': influencer_impact,
+            'community_growth': self._analyze_community_growth(token_symbol),
+            'engagement_trends': self._analyze_engagement_trends(token_symbol)
+        }
+
+        return self._generate_sentiment_insights(sentiment_analysis)
+
+    async def monitor_real_time_sentiment(self, token_symbol: str):
+        """
+        Real-time sentiment monitoring
+        """
+        while True:
+            sentiment = await self.twitter_analyzer.analyze_token_sentiment(token_symbol, lookback_hours=1)
+            self.sentiment_cache[token_symbol] = sentiment
+            
+            if self._detect_sentiment_shift(sentiment):
+                await self._alert_sentiment_change(token_symbol, sentiment)
+            
+            await asyncio.sleep(300)  # Check every 5 minutes
+
+    def _detect_sentiment_shift(self, current_sentiment: Dict) -> bool:
+        """
+        Detects significant shifts in sentiment
+        """
+        threshold = 0.2
+        previous = self.sentiment_cache.get(current_sentiment['symbol'], {}).get('overall_sentiment', 0)
+        return abs(current_sentiment['overall_sentiment'] - previous) > threshold
+
+    async def generate_sentiment_report(self, token_symbol: str) -> Dict:
+        """
+        Generates comprehensive sentiment report
+        """
+        sentiment_data = await self.analyze_comprehensive_sentiment(token_symbol)
+        
+        return {
+            'summary': {
+                'overall_sentiment': sentiment_data['twitter_metrics']['overall_sentiment'],
+                'confidence_score': sentiment_data['twitter_metrics']['confidence_score'],
+                'engagement_quality': self._calculate_engagement_quality(sentiment_data)
+            },
+            'trends': {
+                'sentiment_trend': sentiment_data['twitter_metrics']['sentiment_trend'],
+                'engagement_trend': sentiment_data['engagement_trends'],
+                'growth_trend': sentiment_data['community_growth']
+            },
+            'influencers': {
+                'key_accounts': sentiment_data['influencer_analysis']['key_influencers'],
+                'total_reach': sentiment_data['influencer_analysis']['total_reach'],
+                'engagement_rate': sentiment_data['influencer_analysis']['engagement_rate']
+            },
+            'recommendations': self._generate_sentiment_recommendations(sentiment_data)
+        }
