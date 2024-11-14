@@ -1,0 +1,31 @@
+On-Chain Metrics Analysis
+class OnChainAnalyzer:
+    def __init__(self):
+        self.chain_data = {}
+        self.metrics_cache = {}
+
+    async def analyze_on_chain_metrics(self, token_address: str) -> Dict:
+        """
+        Comprehensive on-chain metrics analysis
+        """
+        chain_data = await self._fetch_chain_data(token_address)
+        
+        analysis = {
+            'token_transfers': self._analyze_transfer_patterns(chain_data['transfers']),
+            'holder_analysis': self._analyze_holder_behavior(chain_data['holders']),
+            'contract_interactions': self._analyze_contract_usage(chain_data['interactions']),
+            'network_activity': self._analyze_network_metrics(chain_data['network_data'])
+        }
+        
+        return self._generate_chain_insights(analysis)
+
+    def _analyze_holder_behavior(self, holder_data: Dict) -> Dict:
+        """
+        Analyzes holder behavior patterns
+        """
+        return {
+            'holder_distribution': self._calculate_holder_distribution(holder_data),
+            'holding_periods': self._analyze_holding_periods(holder_data),
+            'wallet_activity': self._analyze_wallet_activity(holder_data),
+            'accumulation_patterns': self._identify_accumulation_patterns(holder_data)
+        }
