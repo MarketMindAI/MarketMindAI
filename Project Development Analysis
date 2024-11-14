@@ -1,31 +1,196 @@
-Project Development Analysis
+```python
+from dataclasses import dataclass
+from typing import Dict, List, Optional
+import aiohttp
+import asyncio
+from datetime import datetime, timedelta
+
+@dataclass
+class CommunityMetrics:
+    telegram_members: int
+    discord_members: int
+    twitter_followers: int
+    telegram_activity: float
+    discord_activity: float
+    twitter_engagement: float
+    
+@dataclass
+class TeamMetrics:
+    team_size: int
+    active_mods: int
+    response_time: float
+    update_frequency: float
+    community_engagement: float
+
 class DevelopmentAnalyzer:
     def __init__(self):
         self.github_metrics = {}
         self.development_scores = {}
+        self.community_cache = {}
+        self.session = aiohttp.ClientSession()
 
-    async def analyze_development_activity(self, project_repo: str) -> Dict:
+    async def analyze_development_activity(self, project_repo: str, social_links: Dict) -> Dict:
         """
-        Comprehensive project development analysis
+        Comprehensive project development and community analysis
         """
-        dev_data = await self._fetch_development_data(project_repo)
+        # Fetch data concurrently
+        dev_data, community_data, team_activity = await asyncio.gather(
+            self._fetch_development_data(project_repo),
+            self._fetch_community_data(social_links),
+            self._fetch_team_activity(social_links)
+        )
         
         analysis = {
-            'commit_activity': self._analyze_commit_patterns(dev_data['commits']),
-            'code_quality': self._assess_code_quality(dev_data['code_stats']),
-            'developer_engagement': self._analyze_developer_activity(dev_data['contributors']),
-            'project_progress': self._analyze_project_milestones(dev_data['milestones'])
+            'development_metrics': {
+                'commit_activity': self._analyze_commit_patterns(dev_data['commits']),
+                'code_quality': self._assess_code_quality(dev_data['code_stats']),
+                'developer_engagement': self._analyze_developer_activity(dev_data['contributors']),
+                'project_progress': self._analyze_project_milestones(dev_data['milestones'])
+            },
+            'community_metrics': self._analyze_community_activity(community_data),
+            'team_metrics': self._analyze_team_activity(team_activity)
         }
         
         return self._generate_development_insights(analysis)
 
-    def _analyze_commit_patterns(self, commit_data: Dict) -> Dict:
+    async def _fetch_community_data(self, social_links: Dict) -> Dict:
         """
-        Analyzes repository commit patterns
+        Fetches activity data from various community platforms
+        """
+        community_data = {}
+        
+        # Telegram metrics
+        if 'telegram' in social_links:
+            community_data['telegram'] = await self._get_telegram_metrics(social_links['telegram'])
+            
+        # Discord metrics
+        if 'discord' in social_links:
+            community_data['discord'] = await self._get_discord_metrics(social_links['discord'])
+            
+        # Twitter metrics (if not already handled by Twitter analyzer)
+        if 'twitter' in social_links:
+            community_data['twitter'] = await self._get_twitter_metrics(social_links['twitter'])
+            
+        return community_data
+
+    async def _fetch_team_activity(self, social_links: Dict) -> Dict:
+        """
+        Analyzes team and moderator activity across platforms
+        """
+        team_data = {
+            'telegram_activity': await self._analyze_telegram_team(social_links.get('telegram')),
+            'discord_activity': await self._analyze_discord_team(social_links.get('discord')),
+            'update_frequency': await self._analyze_update_frequency(social_links),
+            'response_metrics': await self._analyze_response_metrics(social_links)
+        }
+        return team_data
+
+    def _analyze_community_activity(self, community_data: Dict) -> Dict:
+        """
+        Analyzes community engagement and growth metrics
         """
         return {
-            'commit_frequency': self._calculate_commit_frequency(commit_data),
-            'developer_distribution': self._analyze_developer_distribution(commit_data),
-            'code_impact': self._assess_code_impact(commit_data),
-            'development_consistency': self._measure_development_consistency(commit_data)
+            'platform_metrics': {
+                'telegram': {
+                    'member_count': community_data.get('telegram', {}).get('member_count', 0),
+                    'daily_messages': community_data.get('telegram', {}).get('daily_messages', 0),
+                    'active_users': community_data.get('telegram', {}).get('active_users', 0),
+                    'growth_rate': self._calculate_growth_rate(community_data.get('telegram', {}))
+                },
+                'discord': {
+                    'member_count': community_data.get('discord', {}).get('member_count', 0),
+                    'daily_messages': community_data.get('discord', {}).get('daily_messages', 0),
+                    'active_channels': community_data.get('discord', {}).get('active_channels', 0),
+                    'engagement_rate': self._calculate_engagement_rate(community_data.get('discord', {}))
+                }
+            },
+            'engagement_metrics': {
+                'average_response_time': self._calculate_avg_response_time(community_data),
+                'community_sentiment': self._analyze_community_sentiment(community_data),
+                'discussion_quality': self._assess_discussion_quality(community_data)
+            },
+            'growth_metrics': {
+                'member_growth_rate': self._calculate_member_growth(community_data),
+                'engagement_growth': self._calculate_engagement_growth(community_data),
+                'retention_rate': self._calculate_retention_rate(community_data)
+            }
+        }
+
+    def _analyze_team_activity(self, team_data: Dict) -> Dict:
+        """
+        Analyzes team and moderator performance metrics
+        """
+        return {
+            'team_performance': {
+                'average_response_time': self._calculate_team_response_time(team_data),
+                'update_frequency': self._analyze_update_patterns(team_data),
+                'mod_activity_score': self._calculate_mod_activity_score(team_data),
+                'community_management_score': self._assess_community_management(team_data)
+            },
+            'communication_metrics': {
+                'announcement_frequency': self._calculate_announcement_frequency(team_data),
+                'update_quality': self._assess_update_quality(team_data),
+                'community_interaction': self._analyze_team_interaction(team_data)
+            },
+            'moderation_metrics': {
+                'active_mods': self._count_active_mods(team_data),
+                'mod_coverage': self._analyze_mod_coverage(team_data),
+                'moderation_effectiveness': self._assess_mod_effectiveness(team_data)
+            }
+        }
+
+    def _calculate_team_response_time(self, team_data: Dict) -> float:
+        """
+        Calculates average team response time to community queries
+        """
+        response_times = []
+        for platform, data in team_data.items():
+            if 'response_metrics' in data:
+                response_times.extend(data['response_metrics'])
+        
+        return sum(response_times) / len(response_times) if response_times else 0
+
+    def _analyze_update_patterns(self, team_data: Dict) -> Dict:
+        """
+        Analyzes patterns in team updates and announcements
+        """
+        updates = team_data.get('update_frequency', {})
+        return {
+            'daily_updates': len(updates.get('daily', [])),
+            'weekly_updates': len(updates.get('weekly', [])),
+            'monthly_updates': len(updates.get('monthly', [])),
+            'update_consistency': self._calculate_update_consistency(updates)
+        }
+
+    def _calculate_mod_activity_score(self, team_data: Dict) -> float:
+        """
+        Calculates moderator activity and effectiveness score
+        """
+        mod_metrics = team_data.get('discord_activity', {}).get('mod_metrics', {})
+        
+        factors = {
+            'response_time': 0.3,
+            'active_hours': 0.3,
+            'issue_resolution': 0.2,
+            'community_feedback': 0.2
+        }
+        
+        score = 0
+        for factor, weight in factors.items():
+            if factor in mod_metrics:
+                score += mod_metrics[factor] * weight
+                
+        return min(score * 100, 100)  # Normalize to 0-100 scale
+
+    def _generate_development_insights(self, analysis: Dict) -> Dict:
+        """
+        Generates comprehensive insights combining development and community metrics
+        """
+        return {
+            'overall_health': self._calculate_project_health(analysis),
+            'development_score': self._calculate_development_score(analysis['development_metrics']),
+            'community_score': self._calculate_community_score(analysis['community_metrics']),
+            'team_score': self._calculate_team_score(analysis['team_metrics']),
+            'risk_assessment': self._assess_project_risk(analysis),
+            'recommendations': self._generate_recommendations(analysis)
         }
