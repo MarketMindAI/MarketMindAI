@@ -1,0 +1,35 @@
+Integration Layer
+class MarketMindAnalyzer:
+    def __init__(self):
+        self.market_analyzer = MarketDynamicsAnalyzer()
+        self.sentiment_analyzer = SocialSentimentAnalyzer()
+        self.chain_analyzer = OnChainAnalyzer()
+        self.development_analyzer = DevelopmentAnalyzer()
+        self.community_analyzer = CommunityAnalyzer()
+
+    async def generate_comprehensive_analysis(self, token_data: Dict) -> Dict:
+        """
+        Generates comprehensive project analysis combining all metrics
+        """
+        analysis = {
+            'market_dynamics': await self.market_analyzer.analyze_market_dynamics(token_data['address']),
+            'social_sentiment': await self.sentiment_analyzer.analyze_social_sentiment(token_data['symbol']),
+            'on_chain_metrics': await self.chain_analyzer.analyze_on_chain_metrics(token_data['address']),
+            'development_activity': await self.development_analyzer.analyze_development_activity(token_data['repo']),
+            'community_engagement': await self.community_analyzer.analyze_community_engagement(token_data['project_id'])
+        }
+        
+        return self._generate_final_insights(analysis)
+
+    def _generate_final_insights(self, analysis: Dict) -> Dict:
+        """
+        Combines all analyses into final actionable insights
+        """
+        return {
+            'overall_score': self._calculate_overall_score(analysis),
+            'key_insights': self._extract_key_insights(analysis),
+            'risk_assessment': self._assess_overall_risk(analysis),
+            'growth_potential': self._evaluate_growth_potential(analysis),
+            'recommendations': self._generate_recommendations(analysis)
+        }
+```
