@@ -4,6 +4,10 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional
 import numpy as np
 import pandas as pd
+import asyncio
+import aiohttp
+from solana.rpc.async_api import AsyncClient
+from base58 import b58encode, b58decode
 
 @dataclass
 class MarketMetrics:
@@ -13,49 +17,188 @@ class MarketMetrics:
     liquidity: float
     holder_count: int
     price_change_24h: float
+    raydium_liquidity: float
+    pump_score: float
+
+class RaydiumAPI:
+    def __init__(self):
+        self.base_url = "https://api.raydium.io/v2"
+        self.session = aiohttp.ClientSession()
+
+    async def get_pool_info(self, pool_address: str) -> Dict:
+        """
+        Fetches Raydium pool information
+        """
+        async with self.session.get(f"{self.base_url}/pools/{pool_address}") as response:
+            return await response.json()
+
+    async def get_liquidity_data(self, pool_address: str) -> Dict:
+        """
+        Fetches liquidity information for a Raydium pool
+        """
+        async with self.session.get(f"{self.base_url}/liquidity/{pool_address}") as response:
+            return await response.json()
+
+    async def get_price_impact(self, pool_address: str, amount: float) -> float:
+        """
+        Calculates price impact for a given trade amount
+        """
+        async with self.session.get(
+            f"{self.base_url}/price-impact/{pool_address}",
+            params={"amount": amount}
+        ) as response:
+            data = await response.json()
+            return float(data['priceImpact'])
+
+class PumpAPI:
+    def __init__(self, api_key: str):
+        self.base_url = "https://api.pump.fun"
+        self.api_key = api_key
+        self.session = aiohttp.ClientSession(
+            headers={"Authorization": f"Bearer {api_key}"}
+        )
+
+    async def get_token_metrics(self, token_address: str) -> Dict:
+        """
+        Fetches comprehensive token metrics from Pump.fun
+        """
+        async with self.session.get(f"{self.base_url}/tokens/{token_address}/metrics") as response:
+            return await response.json()
+
+    async def get_social_score(self, token_address: str) -> Dict:
+        """
+        Retrieves social engagement score
+        """
+        async with self.session.get(f"{self.base_url}/tokens/{token_address}/social") as response:
+            return await response.json()
+
+    async def get_market_sentiment(self, token_address: str) -> Dict:
+        """
+        Gets market sentiment analysis
+        """
+        async with self.session.get(f"{self.base_url}/tokens/{token_address}/sentiment") as response:
+            return await response.json()
 
 class MarketDynamicsAnalyzer:
-    def __init__(self):
+    def __init__(self, raydium_client: RaydiumAPI, pump_client: PumpAPI):
         self.historical_data = {}
         self.patterns = {}
         self.confidence_scores = {}
+        self.raydium = raydium_client
+        self.pump = pump_client
+        self.solana = AsyncClient("https://api.mainnet-beta.solana.com")
 
-    async def analyze_market_dynamics(self, token_address: str) -> Dict:
+    async def analyze_market_dynamics(self, token_address: str, pool_address: str) -> Dict:
         """
-        Comprehensive market dynamics analysis combining multiple metrics
+        Comprehensive market dynamics analysis combining Raydium and Pump.fun metrics
         """
-        market_data = await self._fetch_market_data(token_address)
-        
-        analysis = {
-            'price_analysis': self._analyze_price_patterns(market_data),
-            'volume_profile': self._analyze_volume_distribution(market_data),
-            'liquidity_health': self._analyze_liquidity_depth(market_data),
-            'market_efficiency': self._calculate_market_efficiency(market_data),
-            'holder_distribution': self._analyze_holder_distribution(market_data)
+        # Fetch data from multiple sources concurrently
+        market_data, raydium_data, pump_metrics = await asyncio.gather(
+            self._fetch_market_data(token_address),
+            self.raydium.get_pool_info(pool_address),
+            self.pump.get_token_metrics(token_address)
+        )
+
+        # Combine data sources
+        combined_data = {
+            **market_data,
+            'raydium_metrics': raydium_data,
+            'pump_metrics': pump_metrics
         }
-        
+
+        analysis = {
+            'price_analysis': await self._analyze_price_patterns(combined_data),
+            'volume_profile': await self._analyze_volume_distribution(combined_data),
+            'liquidity_health': await self._analyze_liquidity_depth(combined_data),
+            'market_efficiency': self._calculate_market_efficiency(combined_data),
+            'holder_distribution': await self._analyze_holder_distribution(combined_data),
+            'defi_metrics': await self._analyze_defi_metrics(combined_data)
+        }
+
         return self._generate_market_insights(analysis)
 
-    def _analyze_price_patterns(self, market_data: Dict) -> Dict:
+    async def _analyze_price_patterns(self, market_data: Dict) -> Dict:
         """
-        Identifies key price patterns and market structures
+        Enhanced price pattern analysis including DEX data
         """
+        # Get Raydium-specific price data
+        raydium_price_impact = await self.raydium.get_price_impact(
+            market_data['raydium_metrics']['pool_address'],
+            1000  # Standard test amount
+        )
+
         patterns = {
             'support_levels': self._find_support_levels(market_data['price_history']),
             'resistance_levels': self._find_resistance_levels(market_data['price_history']),
             'trend_strength': self._calculate_trend_strength(market_data['price_history']),
-            'volatility_profile': self._analyze_volatility(market_data['price_history'])
+            'volatility_profile': self._analyze_volatility(market_data['price_history']),
+            'dex_metrics': {
+                'price_impact': raydium_price_impact,
+                'pool_depth': market_data['raydium_metrics']['liquidity'],
+                'price_efficiency': self._calculate_price_efficiency(market_data)
+            }
         }
-        
+
         return patterns
 
-    def _analyze_volume_distribution(self, market_data: Dict) -> Dict:
+    async def _analyze_defi_metrics(self, market_data: Dict) -> Dict:
         """
-        Analyzes trading volume patterns and distribution
+        Analyzes DeFi-specific metrics from Raydium
+        """
+        pool_data = market_data['raydium_metrics']
+        pump_data = market_data['pump_metrics']
+
+        return {
+            'liquidity_depth': pool_data['liquidity'],
+            'volume_24h': pool_data['volume24h'],
+            'fee_apr': pool_data['feeApr'],
+            'price_impact': pool_data['priceImpact'],
+            'pump_score': pump_data['overall_score'],
+            'market_efficiency': pump_data['efficiency_score'],
+            'stability_rating': pump_data['stability_score']
+        }
+
+    async def _analyze_volume_distribution(self, market_data: Dict) -> Dict:
+        """
+        Enhanced volume analysis including DEX metrics
+        """
+        # Combine CEX and DEX volume data
+        total_volume = market_data['volume_history']
+        raydium_volume = market_data['raydium_metrics']['volume24h']
+        
+        return {
+            'volume_trend': self._calculate_volume_trend(total_volume),
+            'dex_dominance': raydium_volume / float(total_volume),
+            'buy_sell_ratio': self._calculate_buy_sell_ratio(market_data['trades']),
+            'large_transactions': await self._analyze_large_transactions(market_data['trades']),
+            'volume_correlation': self._analyze_price_volume_correlation(market_data),
+            'pump_volume_score': market_data['pump_metrics']['volume_score']
+        }
+
+    async def _analyze_liquidity_depth(self, market_data: Dict) -> Dict:
+        """
+        Advanced liquidity analysis combining multiple DEX sources
+        """
+        raydium_liquidity = await self.raydium.get_liquidity_data(
+            market_data['raydium_metrics']['pool_address']
+        )
+
+        return {
+            'total_liquidity': raydium_liquidity['totalLiquidity'],
+            'liquidity_distribution': self._analyze_liquidity_distribution(raydium_liquidity),
+            'liquidity_stability': self._calculate_liquidity_stability(raydium_liquidity),
+            'pump_liquidity_score': market_data['pump_metrics']['liquidity_score']
+        }
+
+    def _generate_market_insights(self, analysis: Dict) -> Dict:
+        """
+        Generates comprehensive market insights
         """
         return {
-            'volume_trend': self._calculate_volume_trend(market_data['volume_history']),
-            'buy_sell_ratio': self._calculate_buy_sell_ratio(market_data['trades']),
-            'large_transactions': self._analyze_large_transactions(market_data['trades']),
-            'volume_correlation': self._analyze_price_volume_correlation(market_data)
+            'market_health': self._calculate_market_health(analysis),
+            'risk_assessment': self._assess_market_risk(analysis),
+            'opportunity_score': self._calculate_opportunity_score(analysis),
+            'market_efficiency': analysis['market_efficiency'],
+            'recommendations': self._generate_recommendations(analysis),
+            'pump_insights': analysis['defi_metrics']['pump_score']
         }
